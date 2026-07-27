@@ -1,8 +1,9 @@
 """A single XMPP echo probe.
 
-The probe logs in, sends a random one-time token to the target JID, and waits
-for that *exact* token to come back from that *exact* address. Anything that
-does not match (wrong sender, wrong body, presence, other chats) is ignored.
+The probe logs in, sends a short descriptive message containing a random
+one-time token to the target JID, and waits for that *exact* message to come
+back from that *exact* address. Anything that does not match (wrong sender,
+wrong body, presence, other chats) is ignored.
 The connection is torn down again afterwards so every probe is a fresh,
 end-to-end test of: local login -> federation/routing -> remote responder.
 """
@@ -15,6 +16,8 @@ import uuid
 
 from slixmpp import ClientXMPP
 from slixmpp.jid import JID
+
+from .const import PING_MESSAGE_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +51,9 @@ class XmppEchoProbe:
         """
         # A random, single-use token so we can be certain the reply is *ours*.
         token = uuid.uuid4().hex
+        # The full message body sent (and expected back): a readable prefix plus
+        # the token, so it is easy to spot in XMPP/server logs.
+        payload = f"{PING_MESSAGE_PREFIX} {token}"
         loop = asyncio.get_running_loop()
         result: asyncio.Future[bool] = loop.create_future()
 
@@ -62,15 +68,15 @@ class XmppEchoProbe:
         def on_session_start(_event) -> None:
             # We are authenticated and bound; fire the probe message.
             xmpp.send_presence()
-            xmpp.send_message(mto=self._target_jid, mbody=token, mtype="chat")
-            _LOGGER.debug("Sent XMPP echo token to %s", self._target_jid)
+            xmpp.send_message(mto=self._target_jid, mbody=payload, mtype="chat")
+            _LOGGER.debug("Sent XMPP echo payload to %s", self._target_jid)
 
         def on_message(msg) -> None:
             # Ignore anything that is not from the exact address we pinged.
             if JID(msg["from"]).bare != target_bare:
                 return
-            # Ignore anything whose body is not the exact token we sent.
-            if msg["body"] != token:
+            # Ignore anything whose body is not the exact payload we sent.
+            if msg["body"] != payload:
                 return
             _LOGGER.debug("Received matching echo from %s", msg["from"])
             _resolve(True)
