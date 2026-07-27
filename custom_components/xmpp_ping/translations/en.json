@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "XMPP Ping",
+        "description": "Sends a random token to a target JID and checks that the same token comes back. The target must run an echo responder.",
+        "data": {
+          "jid": "Bot JID (your XMPP account, e.g. bot@example.com)",
+          "password": "Password",
+          "target_jid": "Target JID to ping (the echo address)",
+          "host": "Server host (optional; auto-discovered via DNS if blank)",
+          "port": "Server port",
+          "scan_interval_hours": "Check interval (hours)",
+          "timeout": "Reply timeout (seconds)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This bot JID / target JID pair is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "XMPP Ping options",
+        "data": {
+          "scan_interval_hours": "Check interval (hours)",
+          "timeout": "Reply timeout (seconds)"
+        }
+      }
+    }
+  }
+}
