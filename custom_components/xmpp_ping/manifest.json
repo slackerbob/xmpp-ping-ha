@@ -6,6 +6,6 @@
   "documentation": "https://github.com/slackerbob/xmpp-ping-ha",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "requirements": ["slixmpp==1.8.5"],
+  "requirements": ["slixmpp>=1.8.5"],
   "version": "1.0.0"
 }
