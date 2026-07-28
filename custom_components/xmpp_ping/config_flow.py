@@ -23,10 +23,12 @@ from .const import (
     CONF_JID,
     CONF_PASSWORD,
     CONF_PORT,
+    CONF_RETRY_INTERVAL_MINUTES,
     CONF_SCAN_INTERVAL_HOURS,
     CONF_TARGET_JID,
     CONF_TIMEOUT,
     DEFAULT_PORT,
+    DEFAULT_RETRY_INTERVAL_MINUTES,
     DEFAULT_SCAN_INTERVAL_HOURS,
     DEFAULT_TIMEOUT,
     DOMAIN,
@@ -63,6 +65,10 @@ class XmppPingConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_SCAN_INTERVAL_HOURS, default=DEFAULT_SCAN_INTERVAL_HOURS
                 ): int,
+                vol.Optional(
+                    CONF_RETRY_INTERVAL_MINUTES,
+                    default=DEFAULT_RETRY_INTERVAL_MINUTES,
+                ): int,
                 vol.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): int,
             }
         )
@@ -94,6 +100,16 @@ class XmppPingOptionsFlow(OptionsFlow):
                     default=options.get(
                         CONF_SCAN_INTERVAL_HOURS,
                         data.get(CONF_SCAN_INTERVAL_HOURS, DEFAULT_SCAN_INTERVAL_HOURS),
+                    ),
+                ): int,
+                vol.Optional(
+                    CONF_RETRY_INTERVAL_MINUTES,
+                    default=options.get(
+                        CONF_RETRY_INTERVAL_MINUTES,
+                        data.get(
+                            CONF_RETRY_INTERVAL_MINUTES,
+                            DEFAULT_RETRY_INTERVAL_MINUTES,
+                        ),
                     ),
                 ): int,
                 vol.Optional(

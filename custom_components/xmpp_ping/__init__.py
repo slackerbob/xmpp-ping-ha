@@ -10,17 +10,20 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, Event, HomeAssistant
 
 from .const import (
     CONF_HOST,
     CONF_JID,
     CONF_PASSWORD,
     CONF_PORT,
+    CONF_RETRY_INTERVAL_MINUTES,
     CONF_SCAN_INTERVAL_HOURS,
     CONF_TARGET_JID,
     CONF_TIMEOUT,
     DEFAULT_PORT,
+    DEFAULT_RETRY_INTERVAL_MINUTES,
     DEFAULT_SCAN_INTERVAL_HOURS,
     DEFAULT_TIMEOUT,
     DOMAIN,
@@ -50,18 +53,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: XmppPingConfigEntry) -> 
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
         timeout=_option(entry, CONF_TIMEOUT, DEFAULT_TIMEOUT),
         interval_hours=_option(entry, CONF_SCAN_INTERVAL_HOURS, DEFAULT_SCAN_INTERVAL_HOURS),
+        retry_interval_minutes=_option(
+            entry, CONF_RETRY_INTERVAL_MINUTES, DEFAULT_RETRY_INTERVAL_MINUTES
+        ),
     )
 
     # Store the coordinator and set up the entity platforms.
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Kick off the first probe in the background. A probe can take up to the
-    # configured timeout, so we do not block setup on it — entities simply show
-    # "unknown" until the first result lands.
-    entry.async_create_background_task(
-        hass, coordinator.async_refresh(), f"{DOMAIN}_initial_probe"
-    )
+    async def _async_first_probe(_event: Event | None = None) -> None:
+        """Run the initial probe (in the background, never blocking setup)."""
+        await coordinator.async_refresh()
+
+    # A probe run during HA's boot often fails simply because networking, DNS,
+    # or the remote server are not ready yet — which would then leave the status
+    # "disconnected" until the next scheduled check. So when we are setting up
+    # as part of startup, wait until HA has fully started before the first
+    # probe. When the integration is (re)loaded at runtime, HA is already
+    # running, so probe immediately. Either way, if that first probe still
+    # fails, the coordinator's faster retry interval will recheck soon.
+    if hass.state is CoreState.running:
+        entry.async_create_background_task(
+            hass, _async_first_probe(), f"{DOMAIN}_initial_probe"
+        )
+    else:
+        entry.async_on_unload(
+            hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _async_first_probe
+            )
+        )
 
     # Reload when the user changes options (e.g. a new interval or timeout).
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))

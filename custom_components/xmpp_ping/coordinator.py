@@ -29,13 +29,18 @@ class XmppPingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         port: int,
         timeout: int,
         interval_hours: int,
+        retry_interval_minutes: int,
     ) -> None:
-        """Set up the coordinator with the probe parameters and interval."""
+        """Set up the coordinator with the probe parameters and intervals."""
+        # Cadence used while things are healthy, and the faster one used while
+        # the last probe failed (temporary outages usually clear quickly).
+        self._normal_interval = timedelta(hours=interval_hours)
+        self._retry_interval = timedelta(minutes=retry_interval_minutes)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(hours=interval_hours),
+            update_interval=self._normal_interval,
         )
         self._jid = jid
         self._password = password
@@ -51,6 +56,12 @@ class XmppPingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         update error, so we never raise UpdateFailed here. That keeps the
         entities showing a definite off/on state plus a fresh timestamp instead
         of going unavailable.
+
+        The polling cadence adapts to the result: on success we poll at the
+        normal (slow) interval, on failure we switch to the faster retry
+        interval so a temporary outage is picked up again quickly. The
+        coordinator reschedules using ``self.update_interval`` after this method
+        returns, so mutating it here takes effect on the very next cycle.
         """
         probe = XmppEchoProbe(
             self._jid,
@@ -61,6 +72,17 @@ class XmppPingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             timeout=self._timeout,
         )
         connected = await probe.async_run()
+
+        # Adapt the cadence for the next scheduled refresh.
+        new_interval = self._normal_interval if connected else self._retry_interval
+        if self.update_interval != new_interval:
+            _LOGGER.debug(
+                "XMPP ping switching poll interval to %s (connected=%s)",
+                new_interval,
+                connected,
+            )
+        self.update_interval = new_interval
+
         _LOGGER.debug("XMPP ping result: connected=%s", connected)
         return {
             DATA_CONNECTED: connected,

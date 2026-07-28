@@ -11,6 +11,7 @@
           "host": "Server host (optional; auto-discovered via DNS if blank)",
           "port": "Server port",
           "scan_interval_hours": "Check interval (hours)",
+          "retry_interval_minutes": "Retry interval when down (minutes)",
           "timeout": "Reply timeout (seconds)"
         }
       }
@@ -25,6 +26,7 @@
         "title": "XMPP Ping options",
         "data": {
           "scan_interval_hours": "Check interval (hours)",
+          "retry_interval_minutes": "Retry interval when down (minutes)",
           "timeout": "Reply timeout (seconds)"
         }
       }
