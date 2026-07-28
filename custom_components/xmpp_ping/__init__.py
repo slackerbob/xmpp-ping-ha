@@ -7,6 +7,7 @@ for an XMPP connection.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -22,12 +23,15 @@ from .const import (
     CONF_SCAN_INTERVAL_HOURS,
     CONF_TARGET_JID,
     CONF_TIMEOUT,
+    DATA_CONNECTED,
     DEFAULT_PORT,
     DEFAULT_RETRY_INTERVAL_MINUTES,
     DEFAULT_SCAN_INTERVAL_HOURS,
     DEFAULT_TIMEOUT,
     DOMAIN,
     PLATFORMS,
+    STARTUP_PROBE_ATTEMPTS,
+    STARTUP_PROBE_RETRY_DELAY,
 )
 from .coordinator import XmppPingCoordinator
 
@@ -63,16 +67,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: XmppPingConfigEntry) -> 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     async def _async_first_probe(_event: Event | None = None) -> None:
-        """Run the initial probe (in the background, never blocking setup)."""
-        await coordinator.async_refresh()
+        """Run the initial probe, retrying quickly a few times.
+
+        Runs as a background task, so the retries never block setup. A brief
+        boot-time gap (network/DNS/remote server not ready yet) is ridden out
+        within about a minute instead of waiting a full retry interval. Once a
+        probe succeeds we stop; if all attempts fail, the coordinator is already
+        on its faster retry cadence.
+        """
+        for attempt in range(1, STARTUP_PROBE_ATTEMPTS + 1):
+            await coordinator.async_refresh()
+            if coordinator.data and coordinator.data.get(DATA_CONNECTED):
+                return
+            if attempt < STARTUP_PROBE_ATTEMPTS:
+                await asyncio.sleep(STARTUP_PROBE_RETRY_DELAY)
 
     # A probe run during HA's boot often fails simply because networking, DNS,
     # or the remote server are not ready yet — which would then leave the status
     # "disconnected" until the next scheduled check. So when we are setting up
     # as part of startup, wait until HA has fully started before the first
     # probe. When the integration is (re)loaded at runtime, HA is already
-    # running, so probe immediately. Either way, if that first probe still
-    # fails, the coordinator's faster retry interval will recheck soon.
+    # running, so probe immediately.
     if hass.state is CoreState.running:
         entry.async_create_background_task(
             hass, _async_first_probe(), f"{DOMAIN}_initial_probe"

@@ -11,5 +11,5 @@
   "requirements": [
     "slixmpp>=1.8.5"
   ],
-  "version": "1.1.0"
+  "version": "1.1.1"
 }

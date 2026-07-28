@@ -64,6 +64,7 @@ class XmppPingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         returns, so mutating it here takes effect on the very next cycle.
         """
         probe = XmppEchoProbe(
+            self.hass,
             self._jid,
             self._password,
             self._target_jid,

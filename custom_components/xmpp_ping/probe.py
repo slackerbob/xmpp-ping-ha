@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import ssl
 import uuid
 
+from homeassistant.core import HomeAssistant
 from slixmpp import ClientXMPP
 from slixmpp.jid import JID
 
@@ -22,11 +24,28 @@ from .const import PING_MESSAGE_PREFIX
 _LOGGER = logging.getLogger(__name__)
 
 
+def _build_ssl_context() -> ssl.SSLContext:
+    """Build a verifying TLS context.
+
+    This mirrors slixmpp's own default context, but we build it ourselves so we
+    can do it in an executor thread. slixmpp builds its default context inside
+    ``ClientXMPP.__init__`` and loads the system CA certificates there, which is
+    blocking file I/O — doing that on the event loop trips Home Assistant's
+    blocking-call detection (and can stall other work during startup). Passing a
+    ready-made context makes slixmpp skip that step entirely.
+    """
+    context = ssl.create_default_context()
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    return context
+
+
 class XmppEchoProbe:
     """Perform a single connect -> send -> await-echo -> disconnect cycle."""
 
     def __init__(
         self,
+        hass: HomeAssistant,
         jid: str,
         password: str,
         target_jid: str,
@@ -35,6 +54,7 @@ class XmppEchoProbe:
         timeout: int = 30,
     ) -> None:
         """Store the parameters for one probe run."""
+        self._hass = hass
         self._jid = jid
         self._password = password
         self._target_jid = target_jid
@@ -57,7 +77,13 @@ class XmppEchoProbe:
         loop = asyncio.get_running_loop()
         result: asyncio.Future[bool] = loop.create_future()
 
-        xmpp = ClientXMPP(self._jid, self._password)
+        # Build the TLS context off the event loop (loading CA certs is blocking
+        # file I/O), then hand it to slixmpp so its constructor does no blocking
+        # work. Passing loop explicitly avoids the implicit get_event_loop call.
+        ssl_context = await self._hass.async_add_executor_job(_build_ssl_context)
+        xmpp = ClientXMPP(
+            self._jid, self._password, ssl_context=ssl_context, loop=loop
+        )
         target_bare = JID(self._target_jid).bare
 
         def _resolve(value: bool) -> None:
